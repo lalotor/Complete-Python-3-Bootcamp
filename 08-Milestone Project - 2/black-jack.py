@@ -198,7 +198,7 @@ def ask_for_player_bet(player):
         try:
             bet = int(input(f"{player.name} place your bet: "))
             if bet <= 0 or bet > player.money:
-              raise CustomError("Bet less than zero or greater than available money")
+                raise CustomError("Bet less than zero or greater than available money")
         except ValueError:
             print("Please enter a numeric value")
         except CustomError as err:
@@ -224,7 +224,7 @@ def ask_for_player_action(player, deck):
             action = input(f"{player.name} choose Hit (h/H) or Stay (s/S): ")
             if action.lower() not in  ["h", "s"]:
                 raise CustomError("Only enter Hit (h/H) or Stay (s/S)")
-            elif action.lower() == "h":
+            if action.lower() == "h":
                 print("-----------HIT-----------")
                 player.hand.receive_card(deck.deal_one())
                 print(player)
