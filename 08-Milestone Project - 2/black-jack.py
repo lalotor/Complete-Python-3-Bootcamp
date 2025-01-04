@@ -20,8 +20,8 @@ values = {'Two':2, 'Three':3, 'Four':4, 'Five':5, 'Six':6, 'Seven':7, 'Eight':8,
 
 # %%
 class CustomError(Exception):
-    def __init__(self, value):
-        self.value = value
+    def __init__(self, message):
+        self.value = message
 
     def __str__(self):
         return self.value
@@ -43,10 +43,7 @@ class Card:
 # %%
 class Deck:
     def __init__(self):
-        self.all_cards = [] 
-        for suit in suits:
-            for rank in ranks:
-                self.all_cards.append(Card(suit,rank))
+        self.all_cards = [Card(suit, rank) for suit in suits for rank in ranks]
 
     def shuffle(self):
         random.shuffle(self.all_cards)
@@ -78,33 +75,27 @@ class Hand:
         self.cards.append(card)
         self.total += card.value
         if self.total > BUSTED_LIMIT:
-            aces_found = self.update_aces_value()
-            if not aces_found:
-              self.busted = True
+            if not self.adjust_for_ace():
+                self.busted = True
+
+    def adjust_for_ace(self):
+        for card in self.cards:
+            if card.rank == ACE and card.value == values[ACE]:
+                card.value = ACE_ALTERNATE_VALUE
+                self.total -= (values[ACE] - ACE_ALTERNATE_VALUE)
+                return True
+        return False
 
     def clear(self):
-        self.cards = []
+        self.cards.clear()
         self.total = 0
         self.busted = False
 
     def show_cards(self):
-        for card in self.cards:
-            print(f"{card}, ", end="")
-        print()
+        print(', '.join(str(card) for card in self.cards))
 
     def show_last_card(self):
         print(self.cards[-1])
-
-    def update_aces_value(self):
-        ace_found = False
-        for card in self.cards:
-            if card.rank == ACE and card.value == values[ACE]:
-                self.total = self.total - card.value + ACE_ALTERNATE_VALUE
-                card.value = ACE_ALTERNATE_VALUE
-                ace_found = True
-                break
-
-        return ace_found
 
     def __str__(self):
         return f"{len(self.cards)} cards, for {self.total} total. Is busted? {self.busted}"
@@ -166,15 +157,14 @@ class Game:
     def deal_cards(self):
         self.player.hand.clear()
         self.dealer.hand.clear()
-        self.player.hand.receive_card(self.deck.deal_one())
-        self.dealer.hand.receive_card(self.deck.deal_one())
-        self.player.hand.receive_card(self.deck.deal_one())
-        self.dealer.hand.receive_card(self.deck.deal_one())
+        for _ in range(2):
+            self.player.hand.receive_card(self.deck.deal_one())
+            self.dealer.hand.receive_card(self.deck.deal_one())
 
-    def show_state(self, show_dealer_full_hand = False):
+    def show_state(self, reveal_dealer = False):
         print("-------------------------")
         print("--------DEALER HAND------")
-        if show_dealer_full_hand:
+        if reveal_dealer:
             print(self.dealer)
             self.dealer.hand.show_cards()
         else:
@@ -189,105 +179,71 @@ class Game:
 # Functions
 
 # %%
-def ask_for_player_bet(player):
+def ask_for_bet(player):
 
     print("-------PLAYER BET--------")
-    bet = 0
-
-    while bet <= 0 or bet > player.money:
+    while True:
         try:
-            bet = int(input(f"{player.name} place your bet: "))
-            if bet <= 0 or bet > player.money:
-                raise CustomError("Bet less than zero or greater than available money")
+            bet = int(input(f"{player.name}, place your bet: "))
+            if 0 < bet <= player.money:
+                print(f"Bet {bet}")
+                print(player)
+                return bet
+            else:
+              raise CustomError("Bet must be greater than zero and less than or equal to your current money.")
         except ValueError:
             print("Please enter a numeric value")
         except CustomError as err:
             print(f"Please check: {err}")
 
-    return bet
 
 # %%
 # player = Player(Hand(), "test", INITIAL_MONEY_AMOUNT)
-# bet = ask_for_player_bet(player)
-# print(f"Bet {bet}")
-# print(player)
+# bet = ask_for_bet(player)
 
 # %%
-def ask_for_player_action(player, deck):
+def player_turn(player, deck):
 
-    print("------PLAYER ACTION------")
-    keep_playing = True
-    is_busted = False
-
-    while keep_playing:
-        try:
-            action = input(f"{player.name} choose Hit (h/H) or Stay (s/S): ")
-            if action.lower() not in  ["h", "s"]:
-                raise CustomError("Only enter Hit (h/H) or Stay (s/S)")
-            if action.lower() == "h":
-                print("-----------HIT-----------")
-                player.hand.receive_card(deck.deal_one())
-                print(player)
-                if player.hand.busted:
-                    print("--->>>PLAYER BUSTED, DEALER WINS<<<---")
-                    is_busted = True
-                    keep_playing = False
-                else:
-                    keep_playing = True
-            elif action.lower() == "s":
-                print("-----------STAY----------")
-                keep_playing = False
-        except CustomError as err:
-            print(f"Please check: {err}")
-            keep_playing = True
-
-    return is_busted
-
-# %%
-def dealer_action(dealer, player, deck):
-
-    print("------DEALER ACTION------")
-    keep_playing = True
-    dealer_wins = True
-
-    while keep_playing:
-        if dealer.hand.total > player.hand.total:
-            print("-------DEALER WINS-------")
-            keep_playing = False
+    print("-------PLAYER TURN-------")
+    while True:
+        action = input(f"{player.name}, choose Hit (h/H) or Stay (s/S): ").lower()
+        if action == "h":
+            print("-----------HIT-----------")
+            player.hand.receive_card(deck.deal_one())
+            print(player)
+            if player.hand.busted:
+                print("--->>>PLAYER BUSTED<<<---")
+                return True
+        elif action == "s":
+            print("-----------STAY----------")
+            return False
         else:
-            dealer.hand.receive_card(deck.deal_one())
-            print(dealer)
-            if dealer.hand.busted:
-                print("--->>>DEALER BUSTED, PLAYER WINS<<<---")
-                dealer_wins = False
-                keep_playing = False
+            print("Invalid action. Only enter Hit (h/H) or Stay (s/S)")
 
-    return dealer_wins
+# %%
+def dealer_turn(dealer, player, deck):
+
+    print("-------DEALER TURN-------")
+    while dealer.hand.total <= player.hand.total and not dealer.hand.busted:
+        dealer.hand.receive_card(deck.deal_one())
+        print(dealer)
+
+    return dealer.hand.total > player.hand.total and not dealer.hand.busted
 
 # %%
 def ask_for_keep_playing():
 
-    valid_input = False
-    keep_playing = True
-
-    while not valid_input:
-        try:
-            action = input("Do you want to keep playing? Yes (y/Y) or No (n/N): ")
-            if action.lower() not in  ["y", "n"]:
-                raise CustomError("Only enter Yes (y/Y) or No (n/N)")
-            if action.lower() == "y":
-                keep_playing = True
-            elif action.lower() == "n":
-                keep_playing = False
-            valid_input = True
-        except CustomError as err:
-            print(f"Please check: {err}")
-            valid_input = False
-
-    return keep_playing
+    while True:
+          action = input(f"Do you want to keep playing? Yes (y/Y) or No (n/N): ").lower()
+          if action == "y":
+              return True
+          elif action == "n":
+              return False
+          else:
+              print("Invalid action. Only enter Yes (y/Y) or No (n/N)")
 
 # %%
-def update_money(game, dealer_wins):
+def update_money(game, bet, dealer_wins):
     if dealer_wins:
         game.dealer.money += bet
         game.player.money -= bet
@@ -299,35 +255,37 @@ def update_money(game, dealer_wins):
 # Run game
 
 # %%
-game = Game()
-game.start()
+def main():
+    game = Game()
+    game.start()
 
-game_on = True
+    while True:
+        print("---------NEW PLAY--------")
+        game.deal_cards()
+        game.show_state()
 
-while game_on:
-    print("---------NEW PLAY--------")
-    game.deal_cards()
-    game.show_state()
+        bet = ask_for_bet(game.player)
+        player_busted = player_turn(game.player, game.deck)
+        dealer_wins = dealer_turn(game.dealer, game.player, game.deck) if not player_busted else True
+        update_money(game, bet, dealer_wins)
+        
+        print("-------PLAY SUMMARY------")
+        if dealer_wins:
+            print("--->>>DEALER WINS<<<---")
+        else:
+            print("--->>>PLAYER WINS<<<---")
+        game.show_state(True)
 
-    bet = ask_for_player_bet(game.player)
-    print(f"Bet {bet}")
-    print(game.player)
+        if game.player.money == 0:
+            print("-PLAYER IS OUT OF MONEY. GAME OVER-")
+            break
+        
+        if not ask_for_keep_playing():
+            print("--------GAME OVER--------")
+            break
 
-    is_busted = ask_for_player_action(game.player, game.deck)
+if __name__ == "__main__":
+    main()
 
-    dealer_wins = True
-    if not is_busted:
-        dealer_wins = dealer_action(game.dealer, game.player, game.deck)
 
-    update_money(game, dealer_wins)
 
-    print("-------PLAY SUMMARY------")
-    game.show_state(True)
-
-    if game.player.money == 0:
-        print("-PLAYER RAN OUT OF MONEY-")
-        game_on = False
-    else:
-        game_on = ask_for_keep_playing()
-
-print("--------GAME OVER--------")
